@@ -1,25 +1,19 @@
-import logo from './logo.svg';
-import './App.css';
+// src/App.js
+import React from 'react';
+import InputPage from './InputPage';
 
 function App() {
+  const handleInputSubmit = (formData) => {
+    // You can add logic to handle the form data (e.g., send it to the server)
+    console.log('Form Data:', formData);
+  };
+
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+      <InputPage onSubmit={handleInputSubmit} />
     </div>
   );
 }
 
 export default App;
+
