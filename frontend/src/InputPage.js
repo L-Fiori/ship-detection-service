@@ -3,14 +3,15 @@ import React, { useState } from 'react';
 import './InputPage.css'; // Import the CSS file
 
 const InputPage = ({ onSubmit }) => {
-  const [region, setRegion] = useState('');
-  const [dateRange, setDateRange] = useState('');
-  const [cloudPercentage, setCloudPercentage] = useState('');
+  const [loc, setLoc] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [cloud, setCloud] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
     // Validate inputs here if needed
-    onSubmit({ region, dateRange, cloudPercentage });
+    onSubmit({ loc, startDate, endDate, cloud });
   };
 
   return (
@@ -18,31 +19,41 @@ const InputPage = ({ onSubmit }) => {
       <h1>Input Page</h1>
       <form onSubmit={handleSubmit}>
         <label>
-          Region:
+          Location:
           <input
             type="text"
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
+            value={loc}
+            onChange={(e) => setLoc(e.target.value)}
             required
           />
         </label>
         <br />
         <label>
-          Date Range:
+          Start Date:
           <input
             type="text"
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
             required
           />
         </label>
         <br />
         <label>
-          Cloud Percentage:
+          Cloud:
           <input
             type="text"
-            value={cloudPercentage}
-            onChange={(e) => setCloudPercentage(e.target.value)}
+            value={cloud}
+            onChange={(e) => setCloud(e.target.value)}
+            required
+          />
+        </label>
+        <br />
+        <label>
+          End Date:
+          <input
+            type="text"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
             required
           />
         </label>
