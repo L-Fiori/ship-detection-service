@@ -1,6 +1,4 @@
-// src/InputPage.js
 import React, { useState } from 'react';
-import './InputPage.css'; // Import the CSS file
 
 const InputPage = ({ onSubmit }) => {
   const [loc, setLoc] = useState('');
@@ -8,10 +6,27 @@ const InputPage = ({ onSubmit }) => {
   const [endDate, setEndDate] = useState('');
   const [cloud, setCloud] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Validate inputs here if needed
-    onSubmit({ loc, startDate, endDate, cloud });
+
+    try {
+      const response = await fetch('http://127.0.0.1:5000/collect_inputs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json', // Set appropriate content type
+        },
+        body: JSON.stringify({ loc, startDate, endDate, cloud }), // Convert form data to JSON
+      });
+
+      if (response.ok) {
+        console.log('Data submitted successfully!');
+        // Handle success or redirect here
+      } else {
+        console.error('Error submitting data.');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
   };
 
   return (
