@@ -1,14 +1,19 @@
 from cbers4asat import Cbers4aAPI
 from shapely.geometry import Polygon
 from datetime import date
+import os
+
+def get_api():
+    api = Cbers4aAPI("gustavotorrico@usp.br")
+
+    return api
 
 def get_products(loc, start_date, end_date, cloud):
-    email = "gustavotorrico@usp.br"
     #provider = 'inpe'
     #if (PROVIDER == 'inpe'):
         #api = Cbers4aAPI(email)
     # satellite = 'cbers'
-    api = Cbers4aAPI(email)
+    api = get_api()
     product_type = 'CBERS4A_WPM_L4_DN'
 
     extent = get_extent(loc)
@@ -62,7 +67,8 @@ def get_model():
     return model
 
 def download_images(products):
-    fp_in_images = "../images"
+    api = get_api()
+    fp_in_images = os.path.join(".", "images")
     products_sample = products.copy()
     product_counter = 0
 
@@ -72,7 +78,8 @@ def download_images(products):
         sub = None
 
         # Get download image folder name
-        fp_sample = fp_in_images + sample['id']
+        fp_sample = os.path.join(fp_in_images, sample['id'])
+        print(os.path.abspath(fp_sample), os.path.abspath(fp_in_images))
 
         # Download image folder if not already there
         if not os.path.isdir(fp_sample):
@@ -81,6 +88,7 @@ def download_images(products):
                     threads=3,  # Numero de downloads simultâneos
                     outdir=fp_in_images,
                     with_folder=True)
+
 
 def run(products):
     fp_in_images = "../images"

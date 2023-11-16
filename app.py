@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_cors import CORS
 from time import sleep
-from app.utils import get_products
+from app.utils import get_products, download_images
 
 app = Flask(__name__)
 CORS(app)
@@ -31,7 +31,8 @@ def collect_inputs():
         print(location, start_date, end_date, cloud)
 
         products = get_products(location, start_date, end_date, cloud)
-        
+        download_images(products)
+
         return jsonify(request.json)
 
     return jsonify({'message': 'Invalid request'}), 400
