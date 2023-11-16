@@ -1,53 +1,112 @@
-# Satellite parameters
-PROVIDER = 'inpe'
-SATELLITE = 'cbers'
-LOCATION = 'santos' # salvador, recife, santos, vitoria
-START_DATE = '2016-01-01'
-END_DATE = '2023-11-11'
+from cbers4asat import Cbers4aAPI
+from shapely.geometry import Polygon
+from datetime import date
 
-#=======================================================
-
-# Credentials
-email = "gustavotorrico@usp.br"
-
-if (PROVIDER == 'inpe'):
-  api = Cbers4aAPI(email)
-
-#=======================================================
-
-match SATELLITE:
-  case 'cbers':
+def get_products(loc, start_date, end_date, cloud):
+    email = "gustavotorrico@usp.br"
+    #provider = 'inpe'
+    #if (PROVIDER == 'inpe'):
+        #api = Cbers4aAPI(email)
+    # satellite = 'cbers'
+    api = Cbers4aAPI(email)
     product_type = 'CBERS4A_WPM_L4_DN'
 
-match LOCATION:
-  case 'salvador':
-    extent = Polygon([
-            [-38.51505860581503, -12.978941602226499],
-            [-38.51505860581503, -13.030635291915374],
-            [-38.454543348785876, -13.030635291915374],
-            [-38.454543348785876, -12.978941602226499],
-        ])
-  case 'recife':
-    extent = Polygon([
-            [-34.87737558484915, -8.071411029529315],
-            [-34.87737558484915, -8.056976194056404],
-            [-34.854444033281595, -8.056976194056404],
-            [-34.854444033281595, -8.071411029529315],
-        ])
-  case 'santos':
-    extent = Polygon([
-            [-46.34258562906814, -23.973693250698503],
-            [-46.34258562906814, -23.984440384202856],
-            [-46.32457462294434, -23.984440384202856],
-            [-46.32457462294434, -23.973693250698503],
-        ])
-  case 'vitoria':
-    extent = Polygon([
-            [-40.27913147141851, -20.315899721748366],
-            [-40.27913147141851, -20.31793686489486],
-            [-40.27643483685614, -20.31793686489486],
-            [-40.27643483685614, -20.315899721748366],
-        ])
+    extent = get_extent(loc)
+
+    products = api.query(location=extent,
+                     initial_date=date(int(start_date.split('-')[0]), int(start_date.split('-')[1]), int(start_date.split('-')[2])),
+                     end_date=date(int(end_date.split('-')[0]), int(end_date.split('-')[1]), int(end_date.split('-')[2])),
+                     cloud=cloud,
+                     limit=3,
+                     collections=[product_type])
+    print('products: ', len(products['features']))
+
+    return products
+
+def get_extent(loc):
+    match loc:
+      case 'salvador':
+        extent = Polygon([
+                [-38.51505860581503, -12.978941602226499],
+                [-38.51505860581503, -13.030635291915374],
+                [-38.454543348785876, -13.030635291915374],
+                [-38.454543348785876, -12.978941602226499],
+            ])
+      case 'recife':
+        extent = Polygon([
+                [-34.87737558484915, -8.071411029529315],
+                [-34.87737558484915, -8.056976194056404],
+                [-34.854444033281595, -8.056976194056404],
+                [-34.854444033281595, -8.071411029529315],
+            ])
+      case 'santos':
+        extent = Polygon([
+                [-46.34258562906814, -23.973693250698503],
+                [-46.34258562906814, -23.984440384202856],
+                [-46.32457462294434, -23.984440384202856],
+                [-46.32457462294434, -23.973693250698503],
+            ])
+      case 'vitoria':
+        extent = Polygon([
+                [-40.27913147141851, -20.315899721748366],
+                [-40.27913147141851, -20.31793686489486],
+                [-40.27643483685614, -20.31793686489486],
+                [-40.27643483685614, -20.315899721748366],
+            ])
+
+    return extent
+
+
+def get_model():
+    model = load_model('./models/fullres_model.h5')
+    return model
+
+def download_images(products):
+    fp_in_images = "../images"
+    products_sample = products.copy()
+    product_counter = 0
+
+    for sample in products['features']:
+        products_sample['features'] = [products['features'][product_counter]]
+        product_counter += 1
+        sub = None
+
+        # Get download image folder name
+        fp_sample = fp_in_images + sample['id']
+
+        # Download image folder if not already there
+        if not os.path.isdir(fp_sample):
+          api.download(products=products_sample,
+                    bands=['red', 'green', 'blue', 'nir'], # ['red', 'green', 'blue', 'pan']
+                    threads=3,  # Numero de downloads simultâneos
+                    outdir=fp_in_images,
+                    with_folder=True)
+
+def run(products):
+    fp_in_images = "../images"
+    
+    for sample in products['features']:
+      
+        # Get folder paths of band folders
+        for filename in os.listdir(fp_sample):
+            if filename.endswith("BAND1.tif"):
+                fp_band_blue = fp_sample + '/' + filename
+            if filename.endswith("BAND2.tif"):
+                fp_band_green = fp_sample + '/' + filename
+            if filename.endswith("BAND3.tif"):
+                fp_band_red = fp_sample + '/' + filename
+            if filename.endswith("BAND4.tif"):
+                fp_band_nir = fp_sample + '/' + filename
+
+        # Run functions
+        num_tiles_horizontally, num_tiles_vertically = cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir)
+        #num_tiles_horizontally, num_tiles_vertically = 19, 19
+
+        get_rgb_images(num_tiles_horizontally, num_tiles_vertically)
+        split_and_resize_images('3x3')
+        sub = predict_ships()
+        sample_ = sample['id'] ##
+        break
 
 #=======================================================
 
@@ -63,18 +122,6 @@ if not os.path.isdir(fp_in_images): os.mkdir(fp_in_images)
 
 #=======================================================
 
-if (PROVIDER == 'inpe'):
-  products = api.query(location=extent,
-                     initial_date=date(int(START_DATE.split('-')[0]), int(START_DATE.split('-')[1]), int(START_DATE.split('-')[2])),
-                     end_date=date(int(END_DATE.split('-')[0]), int(END_DATE.split('-')[1]), int(END_DATE.split('-')[2])),
-                     cloud=25, # 0 = no cloud - 100 = can have any cloud
-                     limit=100,
-                     collections=[product_type])
-  print('products: ', len(products['features']))
-
-#=======================================================
-
-fullres_model = load_model(fp_in_model + 'u-net-model-with-submission/fullres_model.h5')
 
 #=======================================================
 
@@ -143,10 +190,10 @@ def masks_as_color(in_mask_list):
 #=======================================================
 
 def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir):
-  !rm -rf /content/tiles/blue
-  !rm -rf /content/tiles/green
-  !rm -rf /content/tiles/red
-  !rm -rf /content/tiles/nir
+#  !rm -rf /content/tiles/blue
+#  !rm -rf /content/tiles/green
+#  !rm -rf /content/tiles/red
+#  !rm -rf /content/tiles/nir
 
   fp_tiles = '/content/tiles/'
   fp_blue = '/content/tiles/blue/'
@@ -245,7 +292,7 @@ def split_and_resize_images(split):
         if '.jpg' in img_path: resized = cv2.bitwise_not(resized)
 
         # Save
-        !rm $img_path
+        #!rm $img_path
         imsave(img_path, resized)
 
       case '6x6':
@@ -277,7 +324,7 @@ def split_and_resize_images(split):
         imsave(img_name_formatted + '_2' + extension, crop2_resized)
         imsave(img_name_formatted + '_3' + extension, crop3_resized)
         imsave(img_name_formatted + '_4' + extension, crop4_resized)
-        !rm $img_path
+        #!rm $img_path
 
 #=======================================================
 

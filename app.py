@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_cors import CORS
 from time import sleep
+from app.utils import get_products
 
 app = Flask(__name__)
 CORS(app)
@@ -28,10 +29,12 @@ def collect_inputs():
         cloud = request.json.get('cloud')
 
         print(location, start_date, end_date, cloud)
-        
-        return redirect(url_for('processing'))
 
-    return render_template('collect_inputs.html')
+        products = get_products(location, start_date, end_date, cloud)
+        
+        return jsonify(request.json)
+
+    return jsonify({'message': 'Invalid request'}), 400
 
 @app.route('/processing', methods=['GET'])
 def processing():
