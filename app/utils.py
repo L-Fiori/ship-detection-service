@@ -91,10 +91,10 @@ def download_images(products):
 
 
 def run(products):
-    fp_in_images = "../images"
+    fp_in_images = os.path.join(".", "images")
     
     for sample in products['features']:
-      
+        fp_sample = os.path.join(fp_in_images, sample['id'])
         # Get folder paths of band folders
         for filename in os.listdir(fp_sample):
             if filename.endswith("BAND1.tif"):
@@ -107,13 +107,12 @@ def run(products):
                 fp_band_nir = fp_sample + '/' + filename
 
         # Run functions
-        num_tiles_horizontally, num_tiles_vertically = cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir)
+        num_tiles_horizontally, num_tiles_vertically = cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sample['id'])
         #num_tiles_horizontally, num_tiles_vertically = 19, 19
 
-        get_rgb_images(num_tiles_horizontally, num_tiles_vertically)
-        split_and_resize_images('3x3')
+        get_rgb_images(num_tiles_horizontally, num_tiles_vertically, sample['id'])
+        split_and_resize_images('3x3', sample['id'])
         sub = predict_ships()
-        sample_ = sample['id'] ##
         break
 
 #=======================================================
@@ -197,23 +196,23 @@ def masks_as_color(in_mask_list):
 
 #=======================================================
 
-def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir):
+def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sample_id):
 #  !rm -rf /content/tiles/blue
 #  !rm -rf /content/tiles/green
 #  !rm -rf /content/tiles/red
 #  !rm -rf /content/tiles/nir
 
-  fp_tiles = '/content/tiles/'
-  fp_blue = '/content/tiles/blue/'
-  fp_green = '/content/tiles/green/'
-  fp_red = '/content/tiles/red/'
-  fp_nir = '/content/tiles/nir/'
+  fp_tiles = os.path.join(os.path.join('./images', sample_id), 'tiles')
+  fp_blue = os.path.join(fp_tiles, 'blue')
+  fp_green = os.path.join(fp_tiles, 'green')
+  fp_red = os.path.join(fp_tiles, 'red')
+  fp_nir = os.path.join(fp_tiles, 'nir')
 
-  if not os.path.isdir(fp_tiles): os.mkdir(fp_tiles)
-  if not os.path.isdir(fp_blue): os.mkdir(fp_blue)
-  if not os.path.isdir(fp_green): os.mkdir(fp_green)
-  if not os.path.isdir(fp_red): os.mkdir(fp_red)
-  if not os.path.isdir(fp_nir): os.mkdir(fp_nir)
+  if not os.path.isdir(fp_tiles): os.path.mkdir(fp_tiles)
+  if not os.path.isdir(fp_blue): os.path.mkdir(fp_blue)
+  if not os.path.isdir(fp_green): os.path.mkdir(fp_green)
+  if not os.path.isdir(fp_red): os.path.mkdir(fp_red)
+  if not os.path.isdir(fp_nir): os.path.mkdir(fp_nir)
 
   fn_blue = 'tile_blue_'
   fn_green = 'tile_green_'
@@ -279,8 +278,9 @@ def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir):
 
 #=======================================================
 
-def split_and_resize_images(split):
-  fp_rgb = '/content/tiles/rgb/'
+def split_and_resize_images(split, sample_id):
+  fp_tiles = os.path.join(os.path.join('./images', sample_id), 'tiles')
+  fp_rgb = os.path.join(fp_tiles, 'rgb')
   for img_name in os.listdir(fp_rgb):
     # Read
     img_path = fp_rgb + img_name
@@ -716,4 +716,58 @@ def plot_sized_predictions(sub, file_name, split):
 
 #=======================================================
 
+def get_rgb_images(count_x, count_y, sample_id):
+  #!rm -rf /content/tiles/rgb
+  fp_tiles = os.path.join(os.path.join('./images', sample_id), 'tiles')
+  fp_rgb = os.path.join(fp_tiles, 'rgb')
+  if not os.path.isdir(fp_rgb): os.mkdir(fp_rgb)
 
+  fp_blue = os.path.join(fp_tiles, 'blue')
+  fp_green = os.path.join(fp_tiles, 'green')
+  fp_red = os.path.join(fp_tiles, 'red')
+  fp_nir = os.path.join(fp_tiles, 'nir')
+
+  fig = plt.figure()
+  count1 = 0
+  count2 = 0
+  list_of_images = []
+
+  for filename in os.listdir(fp_blue):
+    band_2 = rasterio.open(fp_blue + filename)
+    filename = filename.replace("blue", "green")
+    band_3 = rasterio.open(fp_green + filename)
+    filename = filename.replace("green", "red")
+    band_4 = rasterio.open(fp_red + filename)
+    filename = filename.replace("red", "nir")
+    band_5 = rasterio.open(fp_nir + filename)
+
+    num = filename.replace("tile_nir_", "")
+    num = num.replace(".tif", "")
+    num = int(num)
+
+    nir = band_5.read(1)
+    red = band_4.read(1)
+    green = band_3.read(1)
+    blue = band_2.read(1)
+    rgb_composite_gn = np.dstack((red, green, blue))
+
+    ndwi = (green - nir) / (green + nir)
+    ndwi_mean = np.mean(ndwi)
+    print("File name: ", filename)
+    print("Calculating mean NDWI: ", ndwi_mean)
+    if (ndwi_mean > 0.0):
+      # Save RGB jpg
+      rgb_plot=plt.imshow(rgb_composite_gn, interpolation='lanczos')
+      plt.axis('off')
+      filename = filename.replace("nir", "RGB")
+      filename = filename.replace(".tif", ".jpg")
+      plt.savefig(fp_rgb + filename, dpi=200, bbox_inches='tight', pad_inches=0)
+      plt.close('all')
+
+      # Save NDWI tif
+      filename = filename.replace("RGB", "ndwi")
+      filename = filename.replace(".jpg", ".tif")
+      ndwi_img = np.copy(ndwi)
+      ndwi_img[ndwi <= 0.0] = 0 # = land
+      ndwi_img[ndwi > 0.0] = 1 # = water
+      cv2.imwrite(fp_rgb + filename, ndwi_img)
