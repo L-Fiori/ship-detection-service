@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
+import { useNavigate } from "react-router-dom";
+import './InputPage.css';
 
 const InputPage = ({ onSubmit }) => {
+  const navigate = useNavigate();
   const [loc, setLoc] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -17,6 +20,7 @@ const InputPage = ({ onSubmit }) => {
         },
         body: JSON.stringify({ loc, startDate, endDate, cloud }), // Convert form data to JSON
       });
+      navigate("/processing");
 
       if (response.ok) {
         console.log('Data submitted successfully!');
@@ -30,49 +34,45 @@ const InputPage = ({ onSubmit }) => {
   };
 
   return (
-    <div>
+    <div className="input-container">
       <h1>Input Page</h1>
       <form onSubmit={handleSubmit}>
-        <label>
-          Location:
+        <div className="input-group">
+          <label>Location:</label>
           <input
             type="text"
             value={loc}
             onChange={(e) => setLoc(e.target.value)}
             required
           />
-        </label>
-        <br />
-        <label>
-          Start Date:
+        </div>
+        <div className="input-group">
+          <label>Start Date:</label>
           <input
             type="text"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             required
           />
-        </label>
-        <br />
-        <label>
-          Cloud:
+        </div>
+        <div className="input-group">
+          <label>Cloud:</label>
           <input
             type="text"
             value={cloud}
             onChange={(e) => setCloud(e.target.value)}
             required
           />
-        </label>
-        <br />
-        <label>
-          End Date:
+        </div>
+        <div className="input-group">
+          <label>End Date:</label>
           <input
             type="text"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             required
           />
-        </label>
-        <br />
+        </div>
         <button type="submit">Submit</button>
       </form>
     </div>

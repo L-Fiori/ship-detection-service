@@ -1,19 +1,27 @@
-// src/App.js
 import React from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import InputPage from './InputPage';
+import ProcessingPage from './ProcessingPage';
+import ResultPage from './ResultPage';
 
 function App() {
   const handleInputSubmit = (formData) => {
-    // You can add logic to handle the form data (e.g., send it to the server)
+    // Logic to handle the form data
     console.log('Form Data:', formData);
+    // You might want to navigate to another route after form submission
+    // For example: history.push('/processing');
   };
 
   return (
-    <div className="App">
-      <InputPage onSubmit={handleInputSubmit} />
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route exact path="/" element={<InputPage onSubmit={handleInputSubmit} />} />
+        <Route path="/processing" element={<ProcessingPage />} />
+        <Route path="/result_page" element={<ResultPage />} />
+        {/* Add other routes as needed */}
+      </Routes>
+    </BrowserRouter>
   );
 }
 
 export default App;
-
