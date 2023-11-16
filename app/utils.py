@@ -2,6 +2,13 @@ from cbers4asat import Cbers4aAPI
 from shapely.geometry import Polygon
 from datetime import date
 import os
+from osgeo import gdal
+import matplotlib.pyplot as plt
+import rasterio
+import numpy as np
+import cv2
+from skimage.io import imread, imshow, imsave
+from PIL import Image
 
 def get_api():
     api = Cbers4aAPI("gustavotorrico@usp.br")
@@ -108,11 +115,11 @@ def run(products):
 
         # Run functions
         num_tiles_horizontally, num_tiles_vertically = cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sample['id'])
-        #num_tiles_horizontally, num_tiles_vertically = 19, 19
+        num_tiles_horizontally, num_tiles_vertically = 19, 19
 
         get_rgb_images(num_tiles_horizontally, num_tiles_vertically, sample['id'])
         split_and_resize_images('3x3', sample['id'])
-        sub = predict_ships()
+        #sub = predict_ships()
         break
 
 #=======================================================
@@ -203,16 +210,16 @@ def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sa
 #  !rm -rf /content/tiles/nir
 
   fp_tiles = os.path.join(os.path.join('./images', sample_id), 'tiles')
-  fp_blue = os.path.join(fp_tiles, 'blue')
-  fp_green = os.path.join(fp_tiles, 'green')
-  fp_red = os.path.join(fp_tiles, 'red')
-  fp_nir = os.path.join(fp_tiles, 'nir')
+  fp_blue = os.path.join(fp_tiles, 'blue/')
+  fp_green = os.path.join(fp_tiles, 'green/')
+  fp_red = os.path.join(fp_tiles, 'red/')
+  fp_nir = os.path.join(fp_tiles, 'nir/')
 
-  if not os.path.isdir(fp_tiles): os.path.mkdir(fp_tiles)
-  if not os.path.isdir(fp_blue): os.path.mkdir(fp_blue)
-  if not os.path.isdir(fp_green): os.path.mkdir(fp_green)
-  if not os.path.isdir(fp_red): os.path.mkdir(fp_red)
-  if not os.path.isdir(fp_nir): os.path.mkdir(fp_nir)
+  if not os.path.isdir(fp_tiles): os.mkdir(fp_tiles)
+  if not os.path.isdir(fp_blue): os.mkdir(fp_blue)
+  if not os.path.isdir(fp_green): os.mkdir(fp_green)
+  if not os.path.isdir(fp_red): os.mkdir(fp_red)
+  if not os.path.isdir(fp_nir): os.mkdir(fp_nir)
 
   fn_blue = 'tile_blue_'
   fn_green = 'tile_green_'
@@ -280,7 +287,7 @@ def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sa
 
 def split_and_resize_images(split, sample_id):
   fp_tiles = os.path.join(os.path.join('./images', sample_id), 'tiles')
-  fp_rgb = os.path.join(fp_tiles, 'rgb')
+  fp_rgb = os.path.join(fp_tiles, 'rgb/')
   for img_name in os.listdir(fp_rgb):
     # Read
     img_path = fp_rgb + img_name
@@ -719,13 +726,13 @@ def plot_sized_predictions(sub, file_name, split):
 def get_rgb_images(count_x, count_y, sample_id):
   #!rm -rf /content/tiles/rgb
   fp_tiles = os.path.join(os.path.join('./images', sample_id), 'tiles')
-  fp_rgb = os.path.join(fp_tiles, 'rgb')
+  fp_rgb = os.path.join(fp_tiles, 'rgb/')
   if not os.path.isdir(fp_rgb): os.mkdir(fp_rgb)
 
-  fp_blue = os.path.join(fp_tiles, 'blue')
-  fp_green = os.path.join(fp_tiles, 'green')
-  fp_red = os.path.join(fp_tiles, 'red')
-  fp_nir = os.path.join(fp_tiles, 'nir')
+  fp_blue = os.path.join(fp_tiles, 'blue/')
+  fp_green = os.path.join(fp_tiles, 'green/')
+  fp_red = os.path.join(fp_tiles, 'red/')
+  fp_nir = os.path.join(fp_tiles, 'nir/')
 
   fig = plt.figure()
   count1 = 0

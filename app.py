@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_cors import CORS
 from time import sleep
-from app.utils import get_products, download_images
+from app.utils import get_products, download_images, run
 
 app = Flask(__name__)
 CORS(app)
