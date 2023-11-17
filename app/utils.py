@@ -8,7 +8,13 @@ import rasterio
 import numpy as np
 import cv2
 from skimage.io import imread, imshow, imsave
+from skimage.morphology import binary_opening, disk, label
+from skimage.measure import label, regionprops
 from PIL import Image
+from keras.models import load_model
+import pandas as pd
+from matplotlib.cm import get_cmap
+
 
 def get_api():
     api = Cbers4aAPI("gustavotorrico@usp.br")
@@ -70,7 +76,9 @@ def get_extent(loc):
 
 
 def get_model():
-    model = load_model('./models/fullres_model.h5')
+    model_path = os.path.join('./app/models', 'fullres_model.h5')
+    #model_path = os.path.abspath(model_path)
+    model = load_model(model_path)
     return model
 
 def download_images(products):
@@ -114,12 +122,14 @@ def run(products):
                 fp_band_nir = fp_sample + '/' + filename
 
         # Run functions
-        num_tiles_horizontally, num_tiles_vertically = cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sample['id'])
-        num_tiles_horizontally, num_tiles_vertically = 19, 19
+        #num_tiles_horizontally, num_tiles_vertically = cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sample['id'])
+        #num_tiles_horizontally, num_tiles_vertically = 19, 19
 
-        get_rgb_images(num_tiles_horizontally, num_tiles_vertically, sample['id'])
-        split_and_resize_images('3x3', sample['id'])
-        #sub = predict_ships()
+        #get_rgb_images(num_tiles_horizontally, num_tiles_vertically, sample['id'])
+        #split_and_resize_images('3x3', sample['id'])
+        model = get_model()
+        sub = predict_ships(sample['id'], model)
+        plot_sized_predictions(sub, sample['id'], '3x3', model)
         break
 
 #=======================================================
@@ -139,10 +149,10 @@ if not os.path.isdir(fp_in_images): os.mkdir(fp_in_images)
 
 #=======================================================
 
-def predict(img, image_dir='/content/tiles/rgb/'):
+def predict(img, model, image_dir):
     c_img = imread(os.path.join(image_dir, img))
     c_img = np.expand_dims(c_img, 0) / 255.0
-    cur_seg = fullres_model.predict(c_img)[0]
+    cur_seg = model.predict(c_img)[0]
     cur_seg = binary_opening(cur_seg > 0.9, np.expand_dims(disk(2), -1))
     return cur_seg, c_img
 
@@ -172,8 +182,8 @@ def rle_encode(img, min_max_threshold=1e-3, max_mean_threshold=None):
     runs[1::2] -= runs[::2]
     return ' '.join(str(x) for x in runs)
 
-def pred_encode(img, **kwargs):
-    cur_seg, _ = predict(img)
+def pred_encode(img, model, img_path, **kwargs):
+    cur_seg, _ = predict(img, model, img_path)
     cur_rles = multi_rle_encode(cur_seg, **kwargs)
     return [[img, rle] for rle in cur_rles if rle is not None]
 
@@ -343,13 +353,14 @@ def split_and_resize_images(split, sample_id):
 
 #=======================================================
 
-def predict_ships():
+def predict_ships(sample_id, model):
   out_pred_rows = []
-  for img_name in os.listdir('/content/tiles/rgb/'):
+  fp_tiles = os.path.join(os.path.join('./images', sample_id), 'tiles')
+  fp_rgb = os.path.join(fp_tiles, 'rgb/')
+  for img_name in os.listdir(fp_rgb):
     if 'ndwi' not in img_name:
       print("Predicting ships in image ", img_name)
-      if (img_name == '.ipynb_checkpoints'): pass
-      else: out_pred_rows += pred_encode(img_name, min_max_threshold=1.0)
+      out_pred_rows += pred_encode(img_name, model, fp_rgb, min_max_threshold=1.0)
 
   print(out_pred_rows)
   if (out_pred_rows != []):
@@ -650,7 +661,7 @@ def plot_resized_predictions(sub, file_name, split):
 
 #=======================================================
 
-def plot_sized_predictions(sub, file_name, split):
+def plot_sized_predictions(sub, file_name, split, model):
   print('Total ships in all images: ', len(sub.index))
   TOP_PREDICTIONS = len(sub.index)
   num_of_samples = 4
@@ -670,10 +681,10 @@ def plot_sized_predictions(sub, file_name, split):
     if ndwi[y2][x2] == 0: return False
     return True
 
-  def raw_prediction(img, image_dir='/content/tiles/rgb/'):
+  def raw_prediction(img, model, image_dir):
       c_img = imread(os.path.join(image_dir, img))
       c_img = np.expand_dims(c_img, 0)/255.0
-      cur_seg = fullres_model.predict(c_img)[0]
+      cur_seg = model.predict(c_img)[0]
       return cur_seg, c_img[0]
 
   first = True
@@ -682,12 +693,13 @@ def plot_sized_predictions(sub, file_name, split):
                                                                   'tile_RGB_274.jpg',
                                                                   'tile_RGB_275.jpg'])].ImageId.unique())): #[:TOP_PREDICTIONS]
       # Get prediction
-      pred, c_img = raw_prediction(img)
+      fp_tiles = os.path.join(os.path.join('./images', file_name), 'tiles')
+      img_path = os.path.join(fp_tiles, 'rgb/')
+      pred, c_img = raw_prediction(img, model, img_path)
       print("Img: ", img)
       array_of_ships = masks_as_color(sub.query('ImageId==\"{}\"'.format(img))['EncodedPixels'])
 
       # Get ndwi
-      img_path = '/content/tiles/rgb/'
       img_ndwi = img.replace('RGB', 'ndwi')
       img_ndwi = img_ndwi.replace('.jpg', '.tif')
       band_ndwi = rasterio.open(img_path + img_ndwi)
@@ -716,7 +728,7 @@ def plot_sized_predictions(sub, file_name, split):
       if first: ax3.set_title('Bounding boxes', fontsize=18)
       first = False
 
-      fp_output = '/content/output/'
+      fp_output = './images/output/'
       if not os.path.isdir(fp_output): os.mkdir(fp_output)
       fig.savefig(fp_output + file_name + '_' + split + '.jpg', dpi=200, bbox_inches='tight', pad_inches=0)
       plt.close('all')
