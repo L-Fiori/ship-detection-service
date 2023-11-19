@@ -1,10 +1,18 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask_migrate import Migrate
+from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 from time import sleep
 from app.utils import get_products, download_images, run
+from app.models import db, images, ships
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='frontend/public')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///images.sqlite3'
+app.config['SQLAMCHEMY_TRACK_MODIFICATIONS'] = False
 CORS(app)
+migrate = Migrate(app, db)
+db.init_app(app)
+bcrypt = Bcrypt(app)
 
 @app.route('/')
 def index():
@@ -31,8 +39,15 @@ def collect_inputs():
         print(location, start_date, end_date, cloud)
 
         products = get_products(location, start_date, end_date, cloud)
-        #download_images(products)
-        run(products)
+        download_images(products)
+        #name, image, ship_count, product = run(products)
+
+        #imgs = images(name, image, ship_count, product)
+        #db.session.add(imgs)
+        #db.session.commit()
+
+        image = images.query.filter_by(_id = 2).first().image
+        print(image)
 
         return jsonify(request.json)
 
@@ -90,4 +105,6 @@ def process_results():
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
+    app.app_context().push()
+    db.create_all()
     app.run(debug=True)
