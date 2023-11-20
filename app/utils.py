@@ -419,6 +419,7 @@ def add_to_database(sub, file_name, split, model, location):
     fp_output = './images/output/'
     if not os.path.isdir(fp_output): os.mkdir(fp_output)
     file_path = fp_output + img_wo_extension + '_' + split + '.jpg'
+    plt.imshow(img_1)
     plt.savefig(file_path, dpi=200, bbox_inches='tight', pad_inches=0)
     plt.close('all')
 
