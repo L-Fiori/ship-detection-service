@@ -8,6 +8,7 @@ from cbers4asat import Cbers4aAPI
 import matplotlib.pyplot as plt
 from datetime import datetime
 from matplotlib import cm
+from datetime import date
 from osgeo import gdal
 from io import BytesIO
 from PIL import Image
@@ -123,15 +124,17 @@ def run(products, location):
             if filename.endswith("BAND4.tif"):
                 fp_band_nir = fp_sample + '/' + filename
 
+        print(sample['id'])
+        
         # Run functions
-        #num_tiles_horizontally, num_tiles_vertically = cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sample['id'])
+        num_tiles_horizontally, num_tiles_vertically = cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sample['id'])
         #num_tiles_horizontally, num_tiles_vertically = 19, 19
 
-        #get_rgb_images(num_tiles_horizontally, num_tiles_vertically, sample['id'])
-        #split_and_resize_images('no_split', sample['id']) # split_once
+        get_rgb_images(num_tiles_horizontally, num_tiles_vertically, sample['id'])
+        split_and_resize_images('split_once', sample['id']) # no_split, split_once
         model = get_model()
         sub = predict_ships(sample['id'], model)
-        add_to_database(sub, sample['id'], 'no_split', model, location)
+        add_to_database(sub, sample['id'], 'split_once', model, location)
 
         break
 
@@ -226,7 +229,6 @@ def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sa
   count = 0
 
   # Band 1 - Blue
-  '''
   ds = gdal.Open(fp_band_blue)
   band = ds.GetRasterBand(1)
   xsize = band.XSize
@@ -273,7 +275,6 @@ def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sa
           gdal.Translate(str(fp_nir) + str(fn_nir) + str(count) + ".tif", ds, srcWin = (i, j, tile_size_x, tile_size_y))
           count += 1
   count = 0
-  '''
 
   print(count_x, count_y)
   return count_x, count_y
@@ -302,7 +303,7 @@ def split_and_resize_images(split, sample_id):
         if '.jpg' in img_path: resized = cv2.bitwise_not(resized)
 
         # Save
-        #!rm $img_path
+        os.remove(img_path)
         imsave(img_path, resized)
 
       case 'split_once':
@@ -334,6 +335,7 @@ def split_and_resize_images(split, sample_id):
         imsave(img_name_formatted + '_2' + extension, crop2_resized)
         imsave(img_name_formatted + '_3' + extension, crop3_resized)
         imsave(img_name_formatted + '_4' + extension, crop4_resized)
+        os.remove(img_path)
 
 #=======================================================
 
@@ -346,7 +348,6 @@ def predict_ships(sample_id, model):
       print("Predicting ships in image ", img_name)
       out_pred_rows += pred_encode(img_name, model, fp_rgb, min_max_threshold=1.0)
 
-  print(out_pred_rows)
   if (out_pred_rows != []):
     sub = pd.DataFrame(out_pred_rows)
     sub.columns = ['ImageId', 'EncodedPixels']
@@ -377,70 +378,72 @@ def raw_prediction(img, model, image_dir):
     return cur_seg, c_img[0]
 
 def add_to_database(sub, file_name, split, model, location):
-  for img in sub.ImageId.unique():
-    print("Processing image: ", img)
+  if type(sub) == pd.core.frame.DataFrame:
+    for img in sub.ImageId.unique():
+      print("Processing image: ", img)
 
-    fp_tiles = os.path.join(os.path.join('./images', file_name), 'tiles')
-    img_path = os.path.join(fp_tiles, 'rgb/')
-    pred, c_img = raw_prediction(img, model, img_path)
+      fp_tiles = os.path.join(os.path.join('./images', file_name), 'tiles')
+      img_path = os.path.join(fp_tiles, 'rgb/')
+      pred, c_img = raw_prediction(img, model, img_path)
 
-    # Ship masks
-    array_of_ships = masks_as_color(sub.query('ImageId==\"{}\"'.format(img))['EncodedPixels'])
+      # Ship masks
+      array_of_ships = masks_as_color(sub.query('ImageId==\"{}\"'.format(img))['EncodedPixels'])
 
-    # Get ndwi
-    img_ndwi = img.replace('RGB', 'ndwi')
-    img_ndwi = img_ndwi.replace('.jpg', '.tif')
-    band_ndwi = rasterio.open(img_path + img_ndwi)
-    ndwi = band_ndwi.read(1)
-    ndwi_base = np.copy(ndwi)
-    ndwi[ndwi_base <= 0.0] = 0 # = land
-    ndwi[ndwi_base > 0.0] = 1 # = water
+      # Get ndwi
+      img_ndwi = img.replace('RGB', 'ndwi')
+      img_ndwi = img_ndwi.replace('.jpg', '.tif')
+      band_ndwi = rasterio.open(img_path + img_ndwi)
+      ndwi = band_ndwi.read(1)
+      ndwi_base = np.copy(ndwi)
+      ndwi[ndwi_base <= 0.0] = 0 # = land
+      ndwi[ndwi_base > 0.0] = 1 # = water
 
-    # Get bounding boxes
-    lbl_0 = label(pred[...,0])
-    props = regionprops(lbl_0)
-    img_1 = c_img.copy()
-    num_of_ships = 0
-    ship_num_arr = []
-    ship_size_arr = []
-    ship_class_arr = []
-    for prop in props:
-        if analyse_predictions(img, array_of_ships, prop, ndwi):
-          cv2.rectangle(img_1, (prop.bbox[1], prop.bbox[0]), (prop.bbox[3], prop.bbox[2]), (0, 255, 0), 2)
-          num_of_ships += 1
-          ship_num_arr.append(num_of_ships)
-          ship_size_arr.append(random.randint(150, 400))
-          ship_class_arr("cargo")
-        else:
-          cv2.rectangle(img_1, (prop.bbox[1], prop.bbox[0]), (prop.bbox[3], prop.bbox[2]), (255, 0, 0), 2)
+      # Get bounding boxes
+      lbl_0 = label(pred[...,0])
+      props = regionprops(lbl_0)
+      img_1 = c_img.copy()
+      num_of_ships = 0
+      ship_num_arr = []
+      ship_size_arr = []
+      ship_class_arr = []
+      for prop in props:
+          if analyse_predictions(img, array_of_ships, prop, ndwi):
+            cv2.rectangle(img_1, (prop.bbox[1], prop.bbox[0]), (prop.bbox[3], prop.bbox[2]), (0, 255, 0), 2)
+            num_of_ships += 1
+            ship_num_arr.append(num_of_ships)
+            ship_size_arr.append(random.randint(150, 400))
+            ship_class_arr.append("cargo")
+          else:
+            cv2.rectangle(img_1, (prop.bbox[1], prop.bbox[0]), (prop.bbox[3], prop.bbox[2]), (255, 0, 0), 2)
 
-    # Save and get base64
-    img_wo_extension = img.replace(".jpg", "")
-    fp_output = './images/output/'
-    if not os.path.isdir(fp_output): os.mkdir(fp_output)
-    file_path = fp_output + img_wo_extension + '_' + split + '.jpg'
-    plt.imshow(img_1)
-    plt.savefig(file_path, dpi=200, bbox_inches='tight', pad_inches=0)
-    plt.close('all')
+      # Save and get base64
+      img_wo_extension = img.replace(".jpg", "")
+      fp_output = './images/output/'
+      if not os.path.isdir(fp_output): os.mkdir(fp_output)
+      file_path = fp_output + img_wo_extension + '_' + split + '.jpg'
+      plt.imshow(img_1)
+      plt.axis('off')
+      plt.savefig(file_path, dpi=200, bbox_inches='tight', pad_inches=0)
+      plt.close()
 
-    pil_img = Image.open(file_path)
-    buff = BytesIO()
-    pil_img.save(buff, format="JPEG")
-    pil_img_64 = base64.b64encode(buff.getvalue())
+      pil_img = Image.open(file_path)
+      buff = BytesIO()
+      pil_img.save(buff, format="JPEG")
+      pil_img_64 = base64.b64encode(buff.getvalue())
 
-    # Add to database
-    datetime_str = '09/19/22 13:55:26'
-    datetime_object = datetime.strptime(datetime_str, '%m/%d/%y %H:%M:%S')
+      # Add to database
+      datetime_str = '09/19/22 13:55:26'
+      datetime_object = datetime.strptime(datetime_str, '%m/%d/%y %H:%M:%S')
 
-    if images.query.filter_by(image = pil_img_64).first() is None:
-      imgs = images(img, pil_img_64, num_of_ships, file_name, datetime_object, location)
-      db.session.add(imgs)
-      db.session.commit()
-      img_id = images.query.filter_by(image = pil_img_64).first()._id
-      for ship_count in range(0,num_of_ships):
-        ship = ships(ship_num_arr[ship_count], ship_class_arr[ship_count], ship_size_arr[ship_count], img_id)
-        db.session.add(ship)
+      if images.query.filter_by(image = pil_img_64).first() is None:
+        imgs = images(img, pil_img_64, num_of_ships, file_name, datetime_object, location)
+        db.session.add(imgs)
         db.session.commit()
+        img_id = images.query.filter_by(image = pil_img_64).first()._id
+        for ship_count in range(0,num_of_ships):
+          ship = ships(ship_num_arr[ship_count], ship_class_arr[ship_count], ship_size_arr[ship_count], img_id)
+          db.session.add(ship)
+          db.session.commit()
 
 #=======================================================
 

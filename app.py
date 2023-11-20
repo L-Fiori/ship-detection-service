@@ -80,7 +80,7 @@ def collect_inputs():
         print(location, start_date, end_date, cloud)
 
         products = get_products(location, start_date, end_date, cloud)
-        #download_images(products)
+        download_images(products)
         run(products, location)
 
         return jsonify({})
