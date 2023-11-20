@@ -13,7 +13,7 @@ const InputPage = ({ onSubmit }) => {
     e.preventDefault();
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/collect_inputs', {
+      const response = await fetch('http://127.0.0.1:8080/collect_inputs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json', // Set appropriate content type

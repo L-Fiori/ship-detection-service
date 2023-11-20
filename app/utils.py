@@ -1,23 +1,24 @@
-from cbers4asat import Cbers4aAPI
-from shapely.geometry import Polygon
-from datetime import date
-import os
-from osgeo import gdal
-import matplotlib.pyplot as plt
-import rasterio
-import numpy as np
-import cv2
-from skimage.io import imread, imshow, imsave
 from skimage.morphology import binary_opening, disk, label
 from skimage.measure import label, regionprops
-from PIL import Image
+from skimage.io import imread, imshow, imsave
+from shapely.geometry import Polygon
 from keras.models import load_model
-import pandas as pd
 from matplotlib.cm import get_cmap
+from cbers4asat import Cbers4aAPI
+import matplotlib.pyplot as plt
+from datetime import datetime
 from matplotlib import cm
-import base64
+from osgeo import gdal
 from io import BytesIO
-
+from PIL import Image
+import pandas as pd
+import numpy as np
+import rasterio
+import base64
+import random
+import cv2
+import os
+from app.models import db, images, ships
 
 def get_api():
     api = Cbers4aAPI("gustavotorrico@usp.br")
@@ -77,7 +78,6 @@ def get_extent(loc):
 
     return extent
 
-
 def get_model():
     model_path = os.path.join('./app/models', 'fullres_model.h5')
     #model_path = os.path.abspath(model_path)
@@ -107,8 +107,7 @@ def download_images(products):
                     outdir=fp_in_images,
                     with_folder=True)
 
-
-def run(products):
+def run(products, location):
     fp_in_images = os.path.join(".", "images")
     
     for sample in products['features']:
@@ -132,25 +131,11 @@ def run(products):
         #split_and_resize_images('no_split', sample['id']) # split_once
         model = get_model()
         sub = predict_ships(sample['id'], model)
-        pil_img = plot_sized_predictions(sub, sample['id'], 'no_split', model)
+        add_to_database(sub, sample['id'], 'no_split', model, location)
 
-        #print('shape: ', img.shape)
-        #pil_img = Image.fromarray(np.uint8(cm.gist_earth(img)*255))
-        buff = BytesIO()
-        pil_img.save(buff, format="JPEG")
-        pil_img_64 = base64.b64encode(buff.getvalue())#.decode("utf-8")
-        print('pil_img_64: ', pil_img_64)
-
-        name = '1'
-        image = pil_img_64
-        ship_count = 2
-        product = sample['id']
-        return name, image, ship_count, product
         break
 
-
 #=======================================================
-
 
 def predict(img, model, image_dir):
     c_img = imread(os.path.join(image_dir, img))
@@ -217,11 +202,6 @@ def masks_as_color(in_mask_list):
 #=======================================================
 
 def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sample_id):
-#  !rm -rf /content/tiles/blue
-#  !rm -rf /content/tiles/green
-#  !rm -rf /content/tiles/red
-#  !rm -rf /content/tiles/nir
-
   fp_tiles = os.path.join(os.path.join('./images', sample_id), 'tiles')
   fp_blue = os.path.join(fp_tiles, 'blue/')
   fp_green = os.path.join(fp_tiles, 'green/')
@@ -246,6 +226,7 @@ def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sa
   count = 0
 
   # Band 1 - Blue
+  '''
   ds = gdal.Open(fp_band_blue)
   band = ds.GetRasterBand(1)
   xsize = band.XSize
@@ -292,6 +273,7 @@ def cut_tif_into_tiles(fp_band_blue, fp_band_green, fp_band_red, fp_band_nir, sa
           gdal.Translate(str(fp_nir) + str(fn_nir) + str(count) + ".tif", ds, srcWin = (i, j, tile_size_x, tile_size_y))
           count += 1
   count = 0
+  '''
 
   print(count_x, count_y)
   return count_x, count_y
@@ -352,7 +334,6 @@ def split_and_resize_images(split, sample_id):
         imsave(img_name_formatted + '_2' + extension, crop2_resized)
         imsave(img_name_formatted + '_3' + extension, crop3_resized)
         imsave(img_name_formatted + '_4' + extension, crop4_resized)
-        #!rm $img_path
 
 #=======================================================
 
@@ -374,6 +355,91 @@ def predict_ships(sample_id, model):
     return sub
   else:
     return None
+
+#=======================================================
+
+def analyse_predictions(img, array_of_ships, prop, ndwi):
+  x1, y1, x2, y2 = prop.bbox[1], prop.bbox[0],  prop.bbox[3], prop.bbox[2]
+  if x1 >= 768: x1 = 767
+  if y1 >= 768: y1 = 767
+  if x2 >= 768: x2 = 767
+  if y2 >= 768: y2 = 767
+  if ndwi[y1][x1] == 0: return False
+  if ndwi[y1][x2] == 0: return False
+  if ndwi[y2][x1] == 0: return False
+  if ndwi[y2][x2] == 0: return False
+  return True
+
+def raw_prediction(img, model, image_dir):
+    c_img = imread(os.path.join(image_dir, img))
+    c_img = np.expand_dims(c_img, 0)/255.0
+    cur_seg = model.predict(c_img)[0]
+    return cur_seg, c_img[0]
+
+def add_to_database(sub, file_name, split, model, location):
+  for img in sub.ImageId.unique():
+    print("Processing image: ", img)
+
+    fp_tiles = os.path.join(os.path.join('./images', file_name), 'tiles')
+    img_path = os.path.join(fp_tiles, 'rgb/')
+    pred, c_img = raw_prediction(img, model, img_path)
+
+    # Ship masks
+    array_of_ships = masks_as_color(sub.query('ImageId==\"{}\"'.format(img))['EncodedPixels'])
+
+    # Get ndwi
+    img_ndwi = img.replace('RGB', 'ndwi')
+    img_ndwi = img_ndwi.replace('.jpg', '.tif')
+    band_ndwi = rasterio.open(img_path + img_ndwi)
+    ndwi = band_ndwi.read(1)
+    ndwi_base = np.copy(ndwi)
+    ndwi[ndwi_base <= 0.0] = 0 # = land
+    ndwi[ndwi_base > 0.0] = 1 # = water
+
+    # Get bounding boxes
+    lbl_0 = label(pred[...,0])
+    props = regionprops(lbl_0)
+    img_1 = c_img.copy()
+    num_of_ships = 0
+    ship_num_arr = []
+    ship_size_arr = []
+    ship_class_arr = []
+    for prop in props:
+        if analyse_predictions(img, array_of_ships, prop, ndwi):
+          cv2.rectangle(img_1, (prop.bbox[1], prop.bbox[0]), (prop.bbox[3], prop.bbox[2]), (0, 255, 0), 2)
+          num_of_ships += 1
+          ship_num_arr.append(num_of_ships)
+          ship_size_arr.append(random.randint(150, 400))
+          ship_class_arr("cargo")
+        else:
+          cv2.rectangle(img_1, (prop.bbox[1], prop.bbox[0]), (prop.bbox[3], prop.bbox[2]), (255, 0, 0), 2)
+
+    # Save and get base64
+    img_wo_extension = img.replace(".jpg", "")
+    fp_output = './images/output/'
+    if not os.path.isdir(fp_output): os.mkdir(fp_output)
+    file_path = fp_output + img_wo_extension + '_' + split + '.jpg'
+    plt.savefig(file_path, dpi=200, bbox_inches='tight', pad_inches=0)
+    plt.close('all')
+
+    pil_img = Image.open(file_path)
+    buff = BytesIO()
+    pil_img.save(buff, format="JPEG")
+    pil_img_64 = base64.b64encode(buff.getvalue())
+
+    # Add to database
+    datetime_str = '09/19/22 13:55:26'
+    datetime_object = datetime.strptime(datetime_str, '%m/%d/%y %H:%M:%S')
+
+    if images.query.filter_by(image = pil_img_64).first() is None:
+      imgs = images(img, pil_img_64, num_of_ships, file_name, datetime_object, location)
+      db.session.add(imgs)
+      db.session.commit()
+      img_id = images.query.filter_by(image = pil_img_64).first()._id
+      for ship_count in range(0,num_of_ships):
+        ship = ships(ship_num_arr[ship_count], ship_class_arr[ship_count], ship_size_arr[ship_count], img_id)
+        db.session.add(ship)
+        db.session.commit()
 
 #=======================================================
 
@@ -411,7 +477,7 @@ def plot_sized_predictions(sub, file_name, split, model):
       pred, c_img = raw_prediction(img, model, img_path)
       print("Img: ", img)
       pil_img = Image.open(os.path.join(img_path, img))
-      return(pil_img) ### --------------------------------------------
+
       array_of_ships = masks_as_color(sub.query('ImageId==\"{}\"'.format(img))['EncodedPixels'])
 
       # Get ndwi

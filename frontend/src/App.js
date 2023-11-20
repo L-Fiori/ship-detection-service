@@ -17,7 +17,7 @@ function App() {
       <Routes>
         <Route exact path="/" element={<InputPage onSubmit={handleInputSubmit} />} />
         <Route path="/processing" element={<ProcessingPage />} />
-        <Route path="/result_page" element={<ResultPage />} />
+        {<Route path="/result_page" element={<ResultPage />} />}
         {/* Add other routes as needed */}
       </Routes>
     </BrowserRouter>

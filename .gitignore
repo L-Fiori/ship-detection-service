@@ -3,3 +3,4 @@ venv/
 *.db
 *.pyc
 images/
+frontend/node_modules
